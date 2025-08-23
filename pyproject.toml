@@ -3,7 +3,7 @@ name = "cs336-systems"
 version = "1.0.5"
 description = "CS336 Assignment 2 - Systems"
 readme = "README.md"
-requires-python = ">=3.11,<3.13"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "cs336-basics",
     "humanfriendly",
@@ -32,7 +32,7 @@ package = true
 python-preference = "managed"
 
 [tool.uv.sources]
-cs336-basics = { path = "./cs336-basics", editable = true }  # Change this path to your assignment1-basics repo you want to use your own implementation!
+cs336-basics = { path = "../assignment1-basics", editable = true }  # Change this path to your assignment1-basics repo you want to use your own implementation!
 
 
 
