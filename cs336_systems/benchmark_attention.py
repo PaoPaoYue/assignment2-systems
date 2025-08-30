@@ -31,7 +31,6 @@ def benchmark(d_model, context_length, batch_szie=8):
         max_seq_len=context_length,
         device=DEVICE
     )
-    model = torch.compile(model)
     
     optimizer = AdamW(model.parameters())
     
@@ -44,8 +43,8 @@ def benchmark(d_model, context_length, batch_szie=8):
 
         optimizer.zero_grad()
 
-        # if i == warm_up_steps:
-        #     torch.cuda.memory._record_memory_history(max_entries=1000000)
+        if i == warm_up_steps:
+            torch.cuda.memory._record_memory_history(max_entries=1000000)
 
         logger.info(f"Starting {'warmup' if i < warm_up_steps else 'benchmark'} step {i+1 if i < warm_up_steps else i+1 - warm_up_steps}...")
 
@@ -117,5 +116,5 @@ def cal_mem(d_model, context_length, batch_size=8):
     return total_mem / 1024**2 
 
 benchmark(d_model=128, context_length=4096)
-# torch.cuda.memory._dump_snapshot("memory_snapshot.pickle")
-# torch.cuda.memory._record_memory_history(enabled=None)
+torch.cuda.memory._dump_snapshot("memory_snapshot.pickle")
+torch.cuda.memory._record_memory_history(enabled=None)
