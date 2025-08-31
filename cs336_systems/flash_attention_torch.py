@@ -23,11 +23,55 @@ class FlashAttnTorchFunc(torch.autograd.Function):
         args = [FlashAttnTorchFunc._ForwardKernalArgs(b, i, Q, K, V, O, L, B_q, B_k, is_causal) for b in range(B) for i in range(T_q)]
 
         for arg in args:
-            FlashAttnTorchFunc._forwardKernal(arg)
+            FlashAttnTorchFunc._forward_kernal(arg)
         ctx.save_for_backward(Q, K, V, O, L)
-
         return O
     
+    @staticmethod
+    def backward(ctx, dO):
+        Q, K, V, O, L = ctx.saved_tensors
+        B = Q.size(0)
+        O_dO = (O * dO).sum(dim=-1, keepdim=False) # [B T] 
+
+        dQ = torch.zeros_like(Q) # [B T D]
+        dK = torch.zeros_like(K) # [B T D]
+        dV = torch.zeros_like(V) # [B T D]
+
+        B_q = FlashAttnTorchFunc._auto_batch_size(Q.size(1)) # query tile size
+        B_k = FlashAttnTorchFunc._auto_batch_size(K.size(1)) # key & value tile size
+        T_q = math.ceil(Q.size(1) / B_q) # number of query tiles
+        T_k = math.ceil(K.size(1) / B_k) # number of key & value tiles
+
+        for b in range(B):
+            for i in range(T_q):
+                args = FlashAttnTorchFunc._BackwardKernalArgs(b, i, 0, Q, K, V, O, L, dO, O_dO, dQ, dK, dV, B_q, B_k, ctx.is_causal)
+                FlashAttnTorchFunc._backward_first_kernal(args)
+        
+        for b in range(B):
+            for j in range(T_k):
+                args = FlashAttnTorchFunc._BackwardKernalArgs(b, 0, j, Q, K, V, O, L, dO, O_dO, dQ, dK, dV, B_q, B_k, ctx.is_causal)
+                FlashAttnTorchFunc._backward_second_kernal(args)
+
+        return dQ, dK, dV, None
+
+    # no tiling backward    
+    # @staticmethod
+    # def backward(ctx, d_O):
+    #     Q, K, V, O, L = ctx.saved_tensors
+    #     B, T, D = Q.size()
+    #     O_dO = (O * d_O).sum(dim=-1, keepdim=False) # [B T] 
+    #     S = einsum(Q, K, '... q d, ... k d -> ... q k') / math.sqrt(D) # [B T T] 
+    #     P = torch.exp(S - L.unsqueeze(-1)) # [B T T]
+    #     d_V = einsum(P, d_O, '... q k, ... q d -> ... k d') # [B T D] 
+    #     d_P = einsum(d_O, V, '... q d, ... k d -> ... q k') # [B T T] 
+    #     d_S = P * (d_P - O_dO.unsqueeze(-1)) # [B T T] 
+    #     if ctx.is_causal:
+    #         mask = torch.ones((T, T), device=d_S.device)
+    #         mask = torch.tril(mask)
+    #         d_S = d_S.masked_fill(mask == 0, 0.0)
+    #     d_Q = einsum(d_S, K, '... q k, ... k d -> ... q d') / math.sqrt(D) # [B T D] 
+    #     d_K = einsum(d_S, Q, '... q k, ... q d -> ... k d') / math.sqrt(D) # [B T D]
+    #     return d_Q, d_K, d_V, None
 
     @dataclass
     class _ForwardKernalArgs:
@@ -43,7 +87,7 @@ class FlashAttnTorchFunc(torch.autograd.Function):
         is_causal: bool # whether to use causal masking
 
     @staticmethod
-    def _forwardKernal(args: _ForwardKernalArgs):
+    def _forward_kernal(args: _ForwardKernalArgs):
         T = args.Q.size(1)
         D = args.Q.size(2)
 
@@ -80,33 +124,6 @@ class FlashAttnTorchFunc(torch.autograd.Function):
         args.O[args.b, q_start:q_end, :] = o_i / l_i.unsqueeze(-1) # [B_q D]
         args.L[args.b, q_start:q_end] = torch.log(l_i) + m_i[m_old]
 
-    @staticmethod
-    def backward(ctx, dO):
-        Q, K, V, O, L = ctx.saved_tensors
-        B, T, D = Q.size()
-        O_dO = (O * dO).sum(dim=-1, keepdim=False) # [B T] 
-
-        dQ = torch.zeros_like(Q) # [B T D]
-        dK = torch.zeros_like(K) # [B T D]
-        dV = torch.zeros_like(V) # [B T D]
-
-        B_q = FlashAttnTorchFunc._auto_batch_size(T) # query tile size
-        B_k = FlashAttnTorchFunc._auto_batch_size(K.size(1)) # key & value tile size
-        T_q = math.ceil(T / B_q) # number of query tiles
-        T_k = math.ceil(K.size(1) / B_k) # number of key & value tiles
-
-        for b in range(B):
-            for i in range(T_q):
-                args = FlashAttnTorchFunc._BackwardKernalArgs(b, i, 0, Q, K, V, O, L, dO, O_dO, dQ, dK, dV, B_q, B_k, ctx.is_causal)
-                FlashAttnTorchFunc._backwardFirstKernal(args)
-        
-        for b in range(B):
-            for j in range(T_k):
-                args = FlashAttnTorchFunc._BackwardKernalArgs(b, 0, j, Q, K, V, O, L, dO, O_dO, dQ, dK, dV, B_q, B_k, ctx.is_causal)
-                FlashAttnTorchFunc._backwardSecondKernal(args)
-
-        return dQ, dK, dV, None
-
     @dataclass
     class _BackwardKernalArgs:
         b: int # batch index
@@ -127,7 +144,7 @@ class FlashAttnTorchFunc(torch.autograd.Function):
         is_causal: bool # whether to use causal masking
 
     @staticmethod
-    def _backwardFirstKernal(args: _BackwardKernalArgs):
+    def _backward_first_kernal(args: _BackwardKernalArgs):
         T = args.Q.size(1)
         D = args.Q.size(2)
 
@@ -153,12 +170,13 @@ class FlashAttnTorchFunc(torch.autograd.Function):
 
             P_i = torch.exp(S - L_tile.unsqueeze(-1)) # [B_q B_k]
             dP_i = einsum(dO_tile, V_tile, "b_q d, b_k d -> b_q b_k") # [B_q B_k]
-            dS_i = P_i * (dP_i - O_dO_tile.unsqueeze(-1)) / math.sqrt(D) # [B_q B_k]
+            dS = P_i * (dP_i - O_dO_tile.unsqueeze(-1)) / math.sqrt(D) # [B_q B_k]
 
-            args.dQ[args.b, q_start:q_end, :] += einsum(dS_i, K_tile, "b_q b_k, b_k d -> b_q d") # [B_q D]
+            args.dQ[args.b, q_start:q_end, :] += einsum(dS, K_tile, "b_q b_k, b_k d -> b_q d") # [B_q D]
+
 
     @staticmethod
-    def _backwardSecondKernal(args: _BackwardKernalArgs):
+    def _backward_second_kernal(args: _BackwardKernalArgs):
         T = args.K.size(1)
         D = args.K.size(2)
 
@@ -185,10 +203,10 @@ class FlashAttnTorchFunc(torch.autograd.Function):
 
             P_i = torch.exp(S - L_tile.unsqueeze(-1)) # [B_q B_k]
             dP_i = einsum(dO_tile, V_tile, "b_q d, b_k d -> b_q b_k") # [B_q B_k]
-            dS_i = P_i * (dP_i - O_dO_tile.unsqueeze(-1)) / math.sqrt(D) # [B_q B_k]
+            dS = P_i * (dP_i - O_dO_tile.unsqueeze(-1)) / math.sqrt(D) # [B_q B_k]
 
             args.dV[args.b, k_start:k_end, :] += einsum(P_i, dO_tile, "b_q b_k, b_q d -> b_k d") # [B_k D]
-            args.dK[args.b, k_start:k_end, :] += einsum(dS_i, Q_tile, "b_q b_k, b_q d -> b_k d") # [B_k D]
+            args.dK[args.b, k_start:k_end, :] += einsum(dS, Q_tile, "b_q b_k, b_q d -> b_k d") # [B_k D]
 
     @staticmethod
     def _compute_boundary(index:int, tile_size:int, total_size:int) -> tuple[int, int]:
@@ -204,22 +222,3 @@ class FlashAttnTorchFunc(torch.autograd.Function):
             if math.ceil(total_size / tile_size) <= expected_max_tiles:
                 return tile_size
         return min_tile_size
-
-    # no tiling backward    
-    # @staticmethod
-    # def backward(ctx, d_O):
-    #     Q, K, V, O, L = ctx.saved_tensors
-    #     B, T, D = Q.size()
-    #     O_dO = (O * d_O).sum(dim=-1, keepdim=False) # [B T] 
-    #     S = einsum(Q, K, '... q d, ... k d -> ... q k') / math.sqrt(D) # [B T T] 
-    #     P = torch.exp(S - L.unsqueeze(-1)) # [B T T]
-    #     d_V = einsum(P, d_O, '... q k, ... q d -> ... k d') # [B T D] 
-    #     d_P = einsum(d_O, V, '... q d, ... k d -> ... q k') # [B T T] 
-    #     d_S = P * (d_P - O_dO.unsqueeze(-1)) # [B T T] 
-    #     if ctx.is_causal:
-    #         mask = torch.ones((T, T), device=d_S.device)
-    #         mask = torch.tril(mask)
-    #         d_S = d_S.masked_fill(mask == 0, 0.0)
-    #     d_Q = einsum(d_S, K, '... q k, ... k d -> ... q d') / math.sqrt(D) # [B T D] 
-    #     d_K = einsum(d_S, Q, '... q k, ... q d -> ... k d') / math.sqrt(D) # [B T D]
-    #     return d_Q, d_K, d_V, None

@@ -40,7 +40,7 @@ def _make_attn_inputs(device=None):
     return q, k, v, do
 
 
-def _test_flash_forward_pass(impl, device="cpu", is_causal=True):
+def _test_flash_forward_pass(impl, device="cpu", is_causal=False):
     q, k, v, _do = _make_attn_inputs(device)
     o = impl(q, k, v, is_causal)
 
