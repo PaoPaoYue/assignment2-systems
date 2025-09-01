@@ -178,10 +178,11 @@ def flash_fwd_kernel(
             V_tile = tl.load(V_block_ptr, boundary_check=(0, 1), padding_option="zero")
 
             S = tl.dot(Q_tile, K_T_tile) * scale
-            if is_causal and k_end > q_start:
-                q_idx = q_start + tl.arange(0, Q_TILE_SIZE)[:, None]
-                k_idx = k_start + tl.arange(0, K_TILE_SIZE)[None, :]
-                S = tl.where(q_idx < k_idx, float("-inf"), S)
+            if is_causal:
+                if k_end > q_start:
+                    q_idx = q_start + tl.arange(0, Q_TILE_SIZE)[:, None]
+                    k_idx = k_start + tl.arange(0, K_TILE_SIZE)[None, :]
+                    S = tl.where(q_idx < k_idx, float("-inf"), S)
             else:
                 k_idx = k_start + tl.arange(0, K_TILE_SIZE)[None, :]
                 S = tl.where(k_idx >= N_KEYS, float("-inf"), S)
@@ -303,10 +304,11 @@ def flash_backward_first_kernel(
             V_tile = tl.load(V_block_ptr, boundary_check=(0, 1), padding_option="zero")
 
             S = tl.dot(Q_tile, K_T_tile) * scale
-            if is_causal and k_end > q_start:
-                q_idx = q_start + tl.arange(0, Q_TILE_SIZE)[:, None]
-                k_idx = k_start + tl.arange(0, K_TILE_SIZE)[None, :]
-                S = tl.where(q_idx < k_idx, float("-inf"), S)
+            if is_causal:
+                if k_end > q_start:
+                    q_idx = q_start + tl.arange(0, Q_TILE_SIZE)[:, None]
+                    k_idx = k_start + tl.arange(0, K_TILE_SIZE)[None, :]
+                    S = tl.where(q_idx < k_idx, float("-inf"), S)
             else:
                 k_idx = k_start + tl.arange(0, K_TILE_SIZE)[None, :]
                 S = tl.where(k_idx >= N_KEYS, float("-inf"), S)
@@ -434,10 +436,11 @@ def flash_backward_second_kernel(
             O_dO_tile = tl.load(O_dO_block_ptr, boundary_check=(0,), padding_option="zero")  # (Q_TILE_SIZE,)
 
             S = tl.dot(Q_tile, K_T_tile) * scale
-            if is_causal and k_end > q_start:
-                q_idx = q_start + tl.arange(0, Q_TILE_SIZE)[:, None]
-                k_idx = k_start + tl.arange(0, K_TILE_SIZE)[None, :]
-                S = tl.where(q_idx < k_idx, float("-inf"), S)
+            if is_causal:
+                if k_end > q_start:
+                    q_idx = q_start + tl.arange(0, Q_TILE_SIZE)[:, None]
+                    k_idx = k_start + tl.arange(0, K_TILE_SIZE)[None, :]
+                    S = tl.where(q_idx < k_idx, float("-inf"), S)
             else:
                 k_idx = k_start + tl.arange(0, K_TILE_SIZE)[None, :]
                 S = tl.where(k_idx >= N_KEYS, float("-inf"), S)
