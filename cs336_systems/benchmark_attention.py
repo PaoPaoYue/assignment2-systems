@@ -1,7 +1,6 @@
 
 from multiprocessing import context
 import timeit
-from cs336_basics.optimizer import AdamW
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
@@ -9,6 +8,8 @@ from torch.utils.data import DataLoader
 from cs336_basics.nn_model import MultiheadSelfAttention, TransformerLM
 from cs336_basics.nn_utils import cross_entropy
 from cs336_basics.data_loader import RandomStartBatchSampler, TokensDataset
+from cs336_basics.optimizer import AdamW
+from cs336_systems.multihead_flash_attention import MultiheadFlashSelfAttention
 from cs336_systems.common import *
 
 from logging import getLogger
@@ -115,6 +116,6 @@ def cal_mem(d_model, context_length, batch_size=8):
     total_mem = (proj + mask + attn_scores + attn_out + out_proj) * 4
     return total_mem / 1024**2 
 
-benchmark(d_model=128, context_length=4096)
+benchmark(d_model=64, context_length=4096)
 torch.cuda.memory._dump_snapshot("memory_snapshot.pickle")
 torch.cuda.memory._record_memory_history(enabled=None)
