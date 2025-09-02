@@ -168,3 +168,4 @@ data/
 wandb/
 artifacts/
 test.py
+*.pickle

@@ -26,7 +26,7 @@ def benchmark(d_model, context_length, batch_szie=8):
     forward_time_sum, backward_time_sum, optimizer_time_sum = 0, 0, 0
     init_mem_sum, peak_mem_sum = 0, 0
 
-    model = MultiheadSelfAttention(
+    model = MultiheadFlashSelfAttention(
         d_model=d_model,
         num_heads=1,
         max_seq_len=context_length,

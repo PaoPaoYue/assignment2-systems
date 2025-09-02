@@ -6,6 +6,8 @@ import triton.language as tl
 
 class FlashAttnTritonFunc(torch.autograd.Function):
     
+    # TODO: implement the forward and backward fp16 support
+    @torch.amp.custom_fwd(device_type="cuda", cast_inputs=torch.float32)
     @staticmethod
     def forward(ctx, Q:torch.Tensor, K:torch.Tensor, V:torch.Tensor, is_causal:bool=True) -> torch.Tensor:
         assert Q.dim() == K.dim() == V.dim() == 3, "Q, K, V must be 3-dimensional tensors."
@@ -37,6 +39,7 @@ class FlashAttnTritonFunc(torch.autograd.Function):
         ctx.save_for_backward(Q, K, V, O, L)
         return O
 
+    @torch.amp.custom_bwd(device_type="cuda")
     @staticmethod
     def backward(ctx, dO):
         assert dO.is_contiguous(), "dO must be contiguous"

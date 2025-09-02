@@ -13,8 +13,6 @@ from cs336_systems.common import *
 from logging import getLogger
 logger = getLogger(__name__)
 
-logger.info("initializing...")
-
 warm_up_steps = 3
 benchmark_steps = 3
 
