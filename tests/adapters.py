@@ -5,6 +5,7 @@ from typing import Type
 from cs336_systems.ddp_wrapper import DDPOverlapBucketedWrapper, DDPOverlapWrapper
 from cs336_systems.flash_attention_torch import FlashAttnTorchFunc
 from cs336_systems.flash_attention_triton import FlashAttnTritonFunc
+from cs336_systems.sharded_optimizer import ShardedOptimizer
 import torch
 
 
@@ -139,4 +140,4 @@ def get_sharded_optimizer(params, optimizer_cls: Type[torch.optim.Optimizer], **
     Returns:
         Instance of sharded optimizer.
     """
-    raise NotImplementedError
+    return ShardedOptimizer(params, optimizer_cls, **kwargs)
