@@ -61,10 +61,11 @@ class ShardedOptimizer(Optimizer):
                 raise ValueError(f"Cannot shard scalar parameter with shape {p.shape}")
 
             # 7. 分片逻辑
-            shard_size = math.ceil(p.shape[0] / self.world_size)
+            flatten = p.view(-1)
+            shard_size = math.ceil(flatten.shape[0] / self.world_size)
             start = self.rank * shard_size
 
-            shard_param = torch.nn.Parameter(p[start:start+shard_size])
+            shard_param = torch.nn.Parameter(flatten[start:start+shard_size])
             local_group_params.append(shard_param)
 
             # 记录元信息
@@ -80,13 +81,14 @@ class ShardedOptimizer(Optimizer):
             start, end = self.rank * shard_size, (self.rank + 1) * shard_size
             if shard_param.grad is None:
                 shard_param.grad = torch.zeros_like(shard_param.data)
-            shard_param.grad.data.copy_(origin_param.grad.data[start:end])
+            shard_param.grad.data.copy_(origin_param.grad.view(-1).data[start:end])
 
         loss = self._inner_optim.step(closure=closure, **kwargs)
 
         # 同步所有切片
         if self.world_size > 1 and dist.is_initialized():
             for (origin_param, shard_size), shard_param in zip(self._shard_meta, self._local_params):
+                flatten = origin_param.view(-1)
                 # 收集所有 rank 的切片
                 local_data = shard_param.data
                 padding_length = shard_size - local_data.shape[0]
@@ -96,11 +98,11 @@ class ShardedOptimizer(Optimizer):
                 gathered = [torch.empty_like(local_data) for _ in range(self.world_size)]
                 dist.all_gather(gathered, local_data)
                 # 拼接并截取有效长度（最后一个 rank 可能不足 shard_size）
-                if shard_size * self.world_size > origin_param.shape[0]:
-                    full = torch.cat(gathered, dim=0)[:origin_param.shape[0]]
+                if shard_size * self.world_size > flatten.shape[0]:
+                    full = torch.cat(gathered, dim=0)[:flatten.shape[0]]
                 else:
                     full = torch.cat(gathered, dim=0)
-                origin_param.data.copy_(full)
+                flatten.data.copy_(full)
         else:
             pass
         return loss
