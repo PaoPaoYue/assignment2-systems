@@ -1,6 +1,6 @@
 
 import os
-from random import random
+import random
 import timeit
 import numpy as np
 import torch
@@ -13,6 +13,7 @@ from cs336_basics.nn_utils import cross_entropy
 from cs336_basics.optimizer import AdamW
 from cs336_basics.data_loader import RandomStartBatchSampler, TokensDataset
 from cs336_systems.common import *
+from cs336_systems.ddp_wrapper import *
 
 from logging import getLogger
 logger = getLogger(__name__)
@@ -27,7 +28,7 @@ context_length = 256
 batch_size = 32
 
 
-def benchmark_ddp(rank: int, world_size: int, wrapper_cls, **kwargs):
+def benchmark_ddp(rank: int, world_size: int, wrapper_cls, *args):
 
     assert batch_size % world_size == 0, "Batch size must be divisible by world size"
 
@@ -50,7 +51,7 @@ def benchmark_ddp(rank: int, world_size: int, wrapper_cls, **kwargs):
         flash_attn=True,
         device=device
     )
-    wrapper = wrapper_cls(model, **kwargs)
+    wrapper = wrapper_cls(model, *args)
     train_ds = TokensDataset(data=np.load("../assignment1-basics/artifacts/tokens_tinystoriesV2_valid_train:v0/tokens.npy"), context_length=context_length)
     train_loader = DataLoader(
         train_ds,
@@ -172,9 +173,10 @@ def _cleanup_process_group():
     dist.barrier()
     dist.destroy_process_group()
 
-mp.spawn(
-    benchmark_ddp,
-    args=(world_size,),
-    nprocs=world_size,
-    join=True,
-)
+if __name__ == "__main__":
+    mp.spawn(
+        benchmark_ddp,
+        args=(world_size, DDPOverlapWrapper),
+        nprocs=world_size,
+        join=True,
+    )
