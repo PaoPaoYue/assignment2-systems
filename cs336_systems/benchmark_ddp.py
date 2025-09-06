@@ -35,7 +35,7 @@ def benchmark_ddp(rank: int, world_size: int, wrapper_cls, *args):
     _setup_random_seed(42)
 
     device = _setup_process_group(rank=rank, world_size=world_size, backend="nccl")
-    dist.barrier()
+    dist.barrier(device_ids=[rank])
 
     shard_size = batch_size // world_size
     shard_offset = rank * shard_size
@@ -66,7 +66,7 @@ def benchmark_ddp(rank: int, world_size: int, wrapper_cls, *args):
     model.train()
     model.to(device)
 
-    total_t1_t2, total_t2_t3, total_t3_t4 = torch.tensor(0.0), torch.tensor(0.0), torch.tensor(0.0)
+    total_t1_t2, total_t2_t3, total_t3_t4 = torch.tensor(0.0, device=device), torch.tensor(0.0,  device=device), torch.tensor(0.0,  device=device)
 
     if rank == 0:
         logger.info("Starting benchmark...")
