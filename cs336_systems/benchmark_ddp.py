@@ -1,6 +1,7 @@
 
 import os
 import random
+import time
 import timeit
 import numpy as np
 import torch
@@ -182,3 +183,6 @@ if __name__ == "__main__":
             nprocs=world_size,
             join=True,
         )
+        time.sleep(1)
+        dist.destroy_process_group()
+        time.sleep(1)
