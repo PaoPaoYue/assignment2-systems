@@ -177,7 +177,7 @@ def _cleanup_process_group():
 if __name__ == "__main__":
     mp.spawn(
         benchmark_ddp,
-        args=(world_size, DDPOverlapWrapper),
+        args=(world_size, NaiveDDPWrapper),
         nprocs=world_size,
         join=True,
     )
