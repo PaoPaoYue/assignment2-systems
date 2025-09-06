@@ -23,9 +23,9 @@ world_size = 2
 warm_up_steps = 3
 benchmark_steps = 3
 
-config = MODEL_SIZE_CONFIGS["small"]
-context_length = 256
-batch_size = 32
+config = MODEL_SIZE_CONFIGS["xl"]
+context_length = 128
+batch_size = 12
 
 
 def benchmark_ddp(rank: int, world_size: int, wrapper_cls, *args):
@@ -34,7 +34,7 @@ def benchmark_ddp(rank: int, world_size: int, wrapper_cls, *args):
 
     _setup_random_seed(42)
 
-    device = _setup_process_group(rank=rank, world_size=world_size, backend="gloo")
+    device = _setup_process_group(rank=rank, world_size=world_size, backend="nccl")
     dist.barrier()
 
     shard_size = batch_size // world_size
@@ -48,7 +48,7 @@ def benchmark_ddp(rank: int, world_size: int, wrapper_cls, *args):
         num_layers=config.num_layers,
         num_heads=config.num_heads,
         rope_theta=10000.0,
-        flash_attn=True,
+        flash_attn=False,
         device=device
     )
     wrapper = wrapper_cls(model, *args)
@@ -136,6 +136,7 @@ def benchmark_ddp(rank: int, world_size: int, wrapper_cls, *args):
                     logger.info(f"  Forward pass: {avg_t1_t2.item():.6f} seconds")
                     logger.info(f"  Loss computation: {avg_t2_t3.item():.6f} seconds")
                     logger.info(f"  Backward pass: {avg_t3_t4.item():.6f} seconds")
+                    logger.info(f"  Total: {avg_t1_t2.item() + avg_t2_t3.item() + avg_t3_t4.item():.6f} seconds")
                 break
 
     _cleanup_process_group()
