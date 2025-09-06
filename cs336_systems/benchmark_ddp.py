@@ -184,5 +184,3 @@ if __name__ == "__main__":
             join=True,
         )
         time.sleep(1)
-        dist.destroy_process_group()
-        time.sleep(1)
