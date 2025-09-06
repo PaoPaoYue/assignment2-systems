@@ -175,9 +175,10 @@ def _cleanup_process_group():
     dist.destroy_process_group()
 
 if __name__ == "__main__":
-    mp.spawn(
-        benchmark_ddp,
-        args=(world_size, NaiveDDPWrapper),
-        nprocs=world_size,
-        join=True,
-    )
+    for bucket in [1, 10, 100, 1000, 5000]:
+        mp.spawn(
+            benchmark_ddp,
+            args=(world_size, DDPOverlapBucketedWrapper, bucket),
+            nprocs=world_size,
+            join=True,
+        )
